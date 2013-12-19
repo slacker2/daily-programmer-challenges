@@ -51,10 +51,8 @@ def create_adjacency_matrix(num_nodes, graph)
 end
 
 def create_zero_initialized_matrix(num_nodes)
-  row = []
   matrix = []
-  num_nodes.times { |i| row << 0 }
-  num_nodes.times { matrix << row.clone }
+  num_nodes.times { matrix << Array.new(num_nodes, 0) }
   return matrix
 end
 
