@@ -1,0 +1,224 @@
+package knightstour
+
+import java.util.LinkedList
+import java.util.concurrent.ConcurrentLinkedQueue
+import scala.collection.mutable.{Buffer, Map, Stack}
+import scala.collection.JavaConversions._
+// http://www.sciencedirect.com/science/article/pii/S0166218X04003488
+// https://larc.unt.edu/ian/pubs/algoknight.pdf
+
+case class Position(x: Int, y: Int)
+case class Tour(closed: Boolean, path: List[Position])
+
+class KnightsTour(n: Int) {
+
+  // Utility class
+  private case class TourLeaf(start: Int, nextPosition: Position)
+
+  // Utility class
+  private class TourBranch(path: LinkedList[Position], visited: Map[Position, Boolean], leaves: Stack[TourLeaf]) {
+
+    def addLeavesForCurrentPosition() = {
+      validMovesForPosition(branch.path.last).filter( pos => !(branch.visited.getOrElse(pos, false)) ).foreach { pos =>
+        branch.leaves.push(TourLeaf((branch.path.size), pos))
+      }
+    }
+
+    def visitNextLeft() = {
+      val nextTourLeaf = leaves.pop()
+
+      // Back track if we've reached a dead end
+      while (path.size > nextTourLeaf.start) {
+        val last = path.removeLast()
+        visited.remove(last)
+      }
+
+      path.append(nextTourLeaf.nextPosition)
+      visited.put(nextTourLeaf.nextPosition, true)
+    }
+
+  }
+  
+  // Utility class
+  private class TourTree(pos: Position) {
+    val completedTours = Buffer[Tour]()
+    private val initialTourBranches = validMovesForPosition(pos).map { p => 
+      val path = new LinkedList[Position](List(pos))
+      val visited = Map(pos -> true)
+      val leaves = Stack[TourLeaf]() 
+      leaves.push(TourLeaf(1, p))
+      TourBranch(path, visited, leaves)
+    }
+    val unexploredTourBranches = new ConcurrentLinkedQueue(initialTourBranches)
+  }
+
+  lazy val fullTourLength = n * n
+  lazy val cores = Runtime.getRuntime().availableProcessors()
+  private lazy val closedTours = Buffer[Tour]()
+  private lazy val trees = Map[Position, TourTree]()
+
+
+  /**
+  * Returns a tour that begins at the given position and touches every position on the n x n board exactly once.
+  * 
+  * @param x The 0 based index of the column on the n x n board. The index grows to the right, as in the fourth 
+  *          quadrant on a cartesian plane.
+  *
+  * @param y The 0 based index of the row on the n x n board. The index grows down, as in the fourth quadrant on 
+  *          on a cartesian plane.
+  *           
+  */ 
+  def findOneTourFor(x: Int, y: Int): Option[Tour] = {
+
+    val pos = Position(x, y)
+    if (!isValidPosition(pos)) { throw new IllegalArgumentException(s"Position must be between 0 and $n.") }
+
+    val tourTree = trees.getOrElseUpdate(pos, new TourTree(pos))
+    
+    // TODO: see if we have a closed tour, and if so, rotate positions until start = pos, and return it
+    //closedTours.headOption.map { closedTour => return closedTour } 
+
+    while (tourTree.completedTours.size == 0) {
+      val currTourBranch = tourTree.unexploredTourBranches.poll()
+      if (currTourBranch == null) { return None }
+      while (currTourBranch.leaves.size != 0) {
+        tour(tourTree, currTourBranch)
+        if (tourTree.completedTours.size != 0) { 
+          tourTree.unexploredTourBranches.add(currTourBranch)
+          return tourTree.completedTours.headOption
+        }
+      }
+    }
+
+    tourTree.completedTours.headOption
+
+  }
+
+  def findAllToursFor(x: Int, y: Int): List[Tour] = {
+
+    val pos = Position(x, y)
+    if (!isValidPosition(pos)) { throw new IllegalArgumentException(s"Position must be between 0 and $n.") }
+
+    val tourTree = trees.getOrElseUpdate(pos, new TourTree(pos))
+    
+    while (tourTree.unexploredTourBranches.size != 0) {
+      val currTourBranch = tourTree.unexploredTourBranches.poll()
+      while (currTourBranch.leaves.size != 0) {
+        tour(tourTree, currTourBranch)
+      }
+    }
+
+    tourTree.completedTours.toList
+  }
+
+  def findAllClosedTours(): List[Tour] = {
+    (0 until n).foreach { row =>
+      (0 until n).foreach { col =>
+        findAllToursFor(row, col)
+      }
+    }
+    closedTours.toList
+  }
+
+  def tour(tree: TourTree, branch: TourBranch) = {
+
+    //val nextTourLeaf = branch.leaves.pop()
+    //val nextPosition = nextTourLeaf.nextPosition
+    //val leafLevel = nextTourLeaf.start
+    //while (branch.path.size > leafLevel) {
+    //  val last = branch.path.removeLast()
+    //  branch.visited.remove(last)
+    //}
+    //branch.path.append(nextPosition)
+    //branch.visited.put(nextPosition, true)
+
+    branch.visitNextLeaf()
+    branch.addLeavesForCurrentPosition()
+
+    if (branchCompletedTour(branch)) {
+      addTourToCompletedTours(tree, branch)
+    } 
+
+    //addNewLeaves(branch)
+
+  }
+
+  //def addNewLeaves(branch: TourBranch) = {
+  //  validMovesForPosition(branch.path.last).filter( pos => !(branch.visited.getOrElse(pos, false)) ).foreach { pos =>
+  //    branch.leaves.push(TourLeaf((branch.path.size), pos))
+  //  }
+  //}
+
+  def branchCompletedTour(branch: TourBranch): Boolean = (branch.path.size == fullTourLength)
+
+  def addTourToCompletedTours(tree: TourTree, branch: TourBranch) = {
+    validMovesForPosition(branch.path.last).contains(branch.path(0)) match {
+      case true => {
+        val newTour = Tour(true, branch.path.toList)
+        tree.completedTours.append(newTour)
+        closedTours.append(newTour) // TODO: rotate Tour to start position (0,0)
+      }
+      case false => tree.completedTours.append(Tour(false, branch.path.toList))
+    }
+  }
+
+  def validMovesForPosition(pos: Position): List[Position] = possibleMovesForPosition(pos).filter { p => isValidPosition(p) }
+
+  def possibleMovesForPosition(pos: Position): List[Position] = {
+    List( Position( pos.x - 1, pos.y - 2),  // upLeft
+          Position( pos.x + 1, pos.y - 2),  // upRight
+          Position( pos.x - 2, pos.y - 1),  // leftUp
+          Position( pos.x - 2, pos.y + 1),  // leftDown
+          Position( pos.x - 1, pos.y + 2),  // downLeft
+          Position( pos.x + 1, pos.y + 2),  // downRight
+          Position( pos.x + 2, pos.y + 1),  // rightDown
+          Position( pos.x + 2, pos.y - 1)   // rightUp
+        )
+  }
+
+  def isValidPosition(pos: Position): Boolean = (pos.x >= 0 && pos.x < n && pos.y >= 0 && pos.y < n)
+
+  //case class Position(x: Int, y: Int)
+
+
+}
+
+val k = new KnightsTour(5)
+
+val t = k.findOneTourFor(0,0)
+println(t)
+println(t.get.path.size)
+
+val tr = k.findOneTourFor(0,0)
+println(tr)
+println(tr.get.path.size)
+
+println(t.get == tr.get)
+
+val a = k.findAllToursFor(0, 0)
+println(a)
+println(a.size)
+
+var total = 0
+
+(0 until 5).foreach { row =>
+  (0 until 5).foreach { col =>
+    val c = k.findAllToursFor(row,col).size
+    total += c
+    println(s"($row,$col): $c  ($total total)")
+  }
+}
+
+
+//object KnightsTour {
+//
+//  def createKnightsTour(n: Int): KnightsTour = {
+//    if (n < 6) { 
+//      throw new IllegalArgumentException("N must be greater than 6.") // because math
+//    } else {
+//      new KnightsTour(n)
+//    }
+//  }
+//
+//}
+
