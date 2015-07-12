@@ -13,7 +13,6 @@ object KnightsTour {
 
   def main(args: Array[String]) = {
 
-    //try {
     val n = args(0).toInt
 
     if (n < 5) { throw new IllegalArgumentException("Argument must be an integer greater than 4.") }
@@ -29,9 +28,6 @@ object KnightsTour {
     println(tr.get.path.size)
     
     println(t.get == tr.get)
-    //} catch {
-    //  case invalidN: IllegalArgumentException => thew new Illegal
-    //}
 
   }
 
