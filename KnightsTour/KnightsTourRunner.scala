@@ -76,22 +76,17 @@ class KnightsTourRunner(n: Int) {
 
 
   def findOneTourFor(x: Int, y: Int): Option[KnightsTour] = {
-
     val pos = Position(x, y)
     if (!isValidPosition(pos)) { throw new IllegalArgumentException(s"Position must be between 0 and $n.") }
-
     // TODO: rotate positions until start = pos, and return it
     //closedTours.headOption.map { closedTour => return Some(closedTour) } 
-
     val tourTree = trees.getOrElseUpdate(pos, new KnightsTourTree(pos))
     tourTree.tourUntilOneFound()
   }
 
   def findAllToursFor(x: Int, y: Int): List[KnightsTour] = {
-
     val pos = Position(x, y)
     if (!isValidPosition(pos)) { throw new IllegalArgumentException(s"Position must be between 0 and $n.") }
-
     val tourTree = trees.getOrElseUpdate(pos, new KnightsTourTree(pos))
     tourTree.tourAllBranches()
   }
